@@ -1,0 +1,321 @@
+import tkinter as tk
+from tkinter import messagebox
+import os
+import subprocess
+import tempfile
+import time
+import psutil
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+
+import threading  # Importando o threading
+
+
+class AppGUI:
+    def __init__(self):
+        self.open_processes = []
+        self.name_counter = 1  # Inicialização do contador de nomes
+        self.root = tk.Tk()
+        self.root.title("Bot Automático")
+        self.root.geometry("800x800")
+        self.create_widgets()
+
+    def create_widgets(self):
+        username_label = tk.Label(self.root, text="Nome de Usuário:", font=("Arial", 12))
+        username_label.pack(pady=5)
+
+        self.username_entry = tk.Entry(self.root, font=("Arial", 12), width=30)
+        self.username_entry.pack(pady=5)
+
+        password_label = tk.Label(self.root, text="Senha:", font=("Arial", 12))
+        password_label.pack(pady=5)
+
+        self.password_entry = tk.Entry(self.root, font=("Arial", 12), width=30, show="*")
+        self.password_entry.pack(pady=5)
+
+        confirm_password_label = tk.Label(self.root, text="Confirmar Senha:", font=("Arial", 12))
+        confirm_password_label.pack(pady=5)
+
+        self.confirm_password_entry = tk.Entry(self.root, font=("Arial", 12), width=30, show="*")
+        self.confirm_password_entry.pack(pady=5)
+
+        full_name_label = tk.Label(self.root, text="Nome Verdadeiro:", font=("Arial", 12))
+        full_name_label.pack(pady=5)
+
+        self.full_name_entry = tk.Entry(self.root, font=("Arial", 12), width=30)
+        self.full_name_entry.pack(pady=5)
+
+        num_browsers_label = tk.Label(self.root, text="Quantos navegadores você deseja abrir?", font=("Arial", 12))
+        num_browsers_label.pack(pady=5)
+
+        self.num_browsers_spinbox = tk.Spinbox(self.root, values=(1, 2, 3, 4, 5, 6, 10), font=("Arial", 12))
+        self.num_browsers_spinbox.pack(pady=5)
+
+        url_label = tk.Label(self.root, text="URL do site que você quer abrir:", font=("Arial", 12))
+        url_label.pack(pady=5)
+
+        self.url_entry = tk.Entry(self.root, font=("Arial", 12), width=30)
+        self.url_entry.pack(pady=5)
+
+        # Campo para a senha de saque (6 dígitos)
+        withdraw_password_label = tk.Label(self.root, text="Senha para Saque (6 dígitos):", font=("Arial", 12))
+        withdraw_password_label.pack(pady=5)
+
+        self.withdraw_password_entry = tk.Entry(self.root, font=("Arial", 12), width=30, show="*")
+        self.withdraw_password_entry.pack(pady=5)
+
+        confirm_withdraw_password_label = tk.Label(self.root, text="Confirmar Senha para Saque:", font=("Arial", 12))
+        confirm_withdraw_password_label.pack(pady=5)
+
+        self.confirm_withdraw_password_entry = tk.Entry(self.root, font=("Arial", 12), width=30, show="*")
+        self.confirm_withdraw_password_entry.pack(pady=5)
+
+        open_chrome_button = tk.Button(self.root, text="Abrir Navegadores", font=("Arial", 12), command=self.open_chrome)
+        open_chrome_button.pack(pady=10)
+
+        close_chrome_button = tk.Button(self.root, text="Fechar Navegadores", font=("Arial", 12), command=self.close_chrome)
+        close_chrome_button.pack(pady=10)
+
+        exit_button = tk.Button(self.root, text="Sair", font=("Arial", 12), command=self.root.quit)
+        exit_button.pack(pady=10)
+
+    def close_chrome(self):
+        try:
+            if not self.open_processes:
+                messagebox.showinfo("Informação", "Não há janelas do bot abertas.")
+                return
+
+            for process in self.open_processes:
+                try:
+                    pid = process["process"].pid
+                    p = psutil.Process(pid)
+                    p.terminate()
+                except psutil.NoSuchProcess:
+                    continue
+
+            self.open_processes.clear()
+            messagebox.showinfo("Informação", "Todos os navegadores foram fechados com sucesso.")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao tentar fechar as janelas do Chrome.\n{e}")
+
+    def open_chrome(self):
+        try:
+            # Obtendo os valores de todos os campos necessários, incluindo a senha para saque
+            username = self.username_entry.get()
+            password = self.password_entry.get()
+            confirm_password = self.confirm_password_entry.get()
+            full_name = self.full_name_entry.get()
+            withdraw_password = self.withdraw_password_entry.get()  # Capturando o valor da senha de saque
+
+            if not all([username, password, confirm_password, full_name, withdraw_password]):  # Verificando se todos os campos foram preenchidos
+                messagebox.showerror("Erro", "Por favor, preencha todos os campos.")
+                return
+
+            if password != confirm_password:
+                messagebox.showerror("Erro", "As senhas não coincidem.")
+                return
+
+            num_browsers = int(self.num_browsers_spinbox.get())
+            url_input = self.url_entry.get()
+
+            if not url_input.startswith("http://") and not url_input.startswith("https://"):
+                url_input = "https://" + url_input
+
+            chrome_path = r"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+            if os.path.exists(chrome_path):
+                threads = []  # Lista para armazenar as threads
+                for i in range(num_browsers):
+                    username_with_number = f"{username}{self.name_counter}"
+
+                    temp_dir = tempfile.mkdtemp()
+                    window_size = "360,640"
+                    user_agent = "Mozilla/5.0 (Linux; Android 10; Pixel 4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Mobile Safari/537.36"
+                    debug_port = 9222 + i
+
+                    process = subprocess.Popen([chrome_path, "--new-window", "--incognito", f"--user-data-dir={temp_dir}",
+                                                f"--remote-debugging-port={debug_port}", f"--window-size={window_size}",
+                                                f"--user-agent={user_agent}", f"--app={url_input}", "--disable-infobars"])
+
+                    time.sleep(2)
+                    self.open_processes.append({"process": process, "port": debug_port})
+
+                    # Criar uma thread para preencher o formulário, passando a senha de saque
+                    thread = threading.Thread(target=self.fill_registration_forms, args=(url_input, username_with_number, password, full_name, debug_port, withdraw_password))
+                    threads.append(thread)
+                    thread.start()  # Inicia a thread
+
+                    self.name_counter += 1
+
+                # Aguardar todas as threads terminarem antes de mostrar a mensagem de sucesso
+                for thread in threads:
+                    thread.join()
+
+                messagebox.showinfo("Sucesso", "Cadastro realizado em todas as instâncias!")
+            else:
+                messagebox.showerror("Erro", "O Chrome não foi encontrado no caminho especificado.")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao tentar abrir o Chrome.\n{e}")
+
+
+
+    def fill_registration_forms(self, url, username, password, full_name, debug_port, withdraw_password):
+        try:
+            options = Options()
+            options.add_experimental_option("debuggerAddress", f"localhost:{debug_port}")
+            driver = webdriver.Chrome(options=options)
+
+            driver.get(url)
+
+            # Espera explícita para o botão de 'Perfil' estar visível e clicável
+            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, '_itemContent_cavdu_42')]//span[text()='Perfil']")))
+            profile_button = driver.find_element(By.XPATH, "//div[contains(@class, '_itemContent_cavdu_42')]//span[text()='Perfil']")
+            profile_button.click()
+
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[data-input-name='account']")))
+
+            # Preenchendo os campos do formulário
+            driver.find_element(By.CSS_SELECTOR, "input[data-input-name='account']").send_keys(username)
+            driver.find_element(By.CSS_SELECTOR, "input[data-input-name='userpass']").send_keys(password)
+            driver.find_element(By.CSS_SELECTOR, "input[data-input-name='confirmPassword']").send_keys(password)
+            driver.find_element(By.CSS_SELECTOR, "input[data-input-name='realName']").send_keys(full_name)
+
+        # Espera explícita para o botão de registro estar visível e clicável
+            register_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'ui-button--primary') and .//span[text()='Registro']]"))
+            )
+            register_button.click()
+
+            # Espera até que o pop-up de "Registrado com sucesso" apareça
+            WebDriverWait(driver, 10).until(
+                EC.visibility_of_element_located((By.XPATH, "//div[contains(@class, 'ui-popup') and .//h3[text()='Registrado com sucesso']]"))
+            )
+
+            # Tempo extra para garantir que o pop-up carregue completamente
+            time.sleep(2)
+
+            # Clicar no ícone de fechar o pop-up (X)
+            close_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//i[@class='ui-dialog-close-box__icon']"))
+            )
+            close_button.click()
+
+            # Espera para garantir que o pop-up foi fechado antes de continuar
+            WebDriverWait(driver, 10).until(EC.invisibility_of_element(close_button))
+            time.sleep(1)  # Aguarda um pouco mais para garantir que o pop-up foi fechado
+
+            # Verifica e fecha o pop-up adicional, se aparecer
+            try:
+            # Espera até que o pop-up com a classe _close_c6t8a_74 esteja visível
+                close_popup_button = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "_close_c6t8a_74"))
+                )
+                close_popup_button.click()
+                print("Pop-up fechado com sucesso.")
+                
+                # Espera o botão 'ui-dialog-close-box__icon' ficar clicável e então clica
+                close_dialog_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.CLASS_NAME, "ui-dialog-close-box__icon"))
+                )
+                close_dialog_button.click()
+                print("Dialog fechado com sucesso.")
+                
+                # Espera o botão de confirmação na estrutura 'ui-dialog__footer' ficar clicável e clica nele
+                confirm_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "/html/body/div[8]/div/div[1]/div[3]/button"))
+                )
+                confirm_button.click()
+                
+                print("Ação confirmada com sucesso.")
+                
+            except NoSuchElementException:
+                print("Nenhum pop-up encontrado, continuando o processo.")
+                
+            except TimeoutException:
+                print("O tempo de espera para fechar o pop-up expirou, continuando o processo.")
+
+            # Aqui começa a parte de clicar na opção "Saques"
+            WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//p[contains(@class, '_label_28b5j_62') and text()='Saques']"))
+            )
+
+            withdraw_button = driver.find_element(By.XPATH, "//p[contains(@class, '_label_28b5j_62') and text()='Saques']")
+            withdraw_button.click()
+
+            # Espera até que os campos de senha para saque apareçam
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "lobby-form-item--withdrawPass"))
+            )
+
+            # Preenche o campo de senha para saque
+            withdraw_pass_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "lobby-form-item--withdrawPass"))
+            ).find_element(By.TAG_NAME, "input")
+            withdraw_pass_field.send_keys(withdraw_password)
+
+            # Preenche o campo de confirmação de senha para saque
+            confirm_pass_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "lobby-form-item--confirmWithdrawPass"))
+            ).find_element(By.TAG_NAME, "input")
+            confirm_pass_field.send_keys(withdraw_password)
+
+            print("Senha para saque preenchida com sucesso.")
+
+            # Clica no botão "Confirmar"
+            confirm_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'ui-button') and .//span[text()='Confirmar']]"))
+            )
+            confirm_button.click()
+
+            print("Botão 'Confirmar' clicado com sucesso.")
+
+            # Clica no botão com a classe _addAccountInputBtn_1o4yf_17
+            add_account_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CLASS_NAME, "_addAccountInputBtn_1o4yf_17"))
+            )
+            add_account_button.click()
+
+            print("Botão 'Adicionar Conta' clicado com sucesso.")
+
+            # Espera até que o botão de 'Adicionar Pix' esteja visível e clicável
+            add_pix_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CLASS_NAME, "_cell_13fxl_24"))
+            )
+            add_pix_button.click()
+
+            print("Botão 'Adicionar Pix' clicado com sucesso.")
+
+            # Espera até que o span com texto 'Inserir Senha' esteja visível e encontra o campo de senha relacionado
+            withdraw_pass_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "_form_1xh6r_17"))
+            ).find_element(By.TAG_NAME, "input")
+            withdraw_pass_field.send_keys(withdraw_password)
+            
+            # Garantir que a rolagem para o botão "Próximo" é realizada
+            driver.execute_script("arguments[0].scrollIntoView();", withdraw_pass_field)
+
+            # Espera até que o botão 'Próximo' esteja visível e clicável
+            next_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']//span[text()='Próximo']"))
+            )
+
+            # Usando JavaScript para garantir que o clique funcione
+            driver.execute_script("arguments[0].click();", next_button)
+            print("Botão 'Próximo' clicado com sucesso.")
+                
+        except Exception as e:
+            print(f"Erro ao preencher o formulário ou clicar em botões: {e}")
+
+   
+
+
+    def run(self):
+        self.root.mainloop()
+
+
+if __name__ == "__main__":
+    app = AppGUI()
+    app.run() 
